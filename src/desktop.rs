@@ -506,8 +506,9 @@ impl<R: Runtime> CrabCameraManager<R> {
     pub async fn start_direct_streaming(
         &self,
         config: streaming::StreamConfig,
+        callback: Box<dyn Fn(CameraFrame) + Send + Sync>,
     ) -> Result<String, String> {
-        streaming::start_direct_streaming(self.0.clone(), config).await
+        streaming::start_direct_streaming(config, callback).await
     }
 
     /// Stop direct streaming

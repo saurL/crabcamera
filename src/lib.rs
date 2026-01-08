@@ -117,7 +117,6 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::capture::save_frame_to_disk,
             commands::capture::save_frame_compressed,
             // Direct streaming commands
-            commands::streaming::start_direct_streaming,
             commands::streaming::stop_direct_streaming,
             commands::streaming::get_streaming_status,
             commands::streaming::list_active_streams,

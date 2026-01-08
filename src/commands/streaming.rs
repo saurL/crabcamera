@@ -39,11 +39,9 @@ pub struct StreamStatus {
     pub is_active: bool,
 }
 
-/// Start direct streaming (frames via Tauri events)
-#[command]
-pub async fn start_direct_streaming<R: Runtime>(
-    app: AppHandle<R>,
+pub async fn start_direct_streaming(
     config: StreamConfig,
+    callback: Box<dyn Fn(CameraFrame) + Send + Sync>,
 ) -> Result<String, String> {
     log::info!("Starting direct streaming for device: {}", config.device_id);
 
@@ -75,15 +73,6 @@ pub async fn start_direct_streaming<R: Runtime>(
 
     let camera_arc = Arc::new(AsyncMutex::new(camera));
     let is_active = Arc::new(AsyncRwLock::new(true));
-
-    // Create callback closure that emits frames to Tauri frontend
-    let app_clone = app.clone();
-    let callback = Box::new(move |frame: CameraFrame| {
-        // Emit frame to frontend via Tauri event
-        if let Err(e) = app_clone.emit("camera-frame", &frame) {
-            log::error!("Failed to emit frame event: {}", e);
-        }
-    });
 
     // Start streaming with the callback
     {
