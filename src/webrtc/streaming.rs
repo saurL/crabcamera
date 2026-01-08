@@ -152,6 +152,27 @@ fn rgb8_to_yuv420(rgb8: &[u8], width: u32, height: u32) -> Vec<u8> {
     yuv
 }
 
+enum DetectedFormat {
+    Rgb8,   // 1 byte/pixel
+    YuV420, // 1.5 bytes/pixel
+    Rgb24,  // 3 bytes/pixel
+    Rgba32, // 4 bytes/pixel
+    Unknown(f32),
+}
+
+fn detect_format(data_len: usize, width: u32, height: u32) -> DetectedFormat {
+    let pixels = (width * height) as usize;
+    let ratio = data_len as f32 / pixels as f32;
+
+    match ratio {
+        r if (r - 1.0).abs() < 0.01 => DetectedFormat::Rgb8,
+        r if (r - 1.5).abs() < 0.01 => DetectedFormat::YuV420,
+        r if (r - 3.0).abs() < 0.01 => DetectedFormat::Rgb24,
+        r if (r - 4.0).abs() < 0.01 => DetectedFormat::Rgba32,
+        r => DetectedFormat::Unknown(r),
+    }
+}
+
 /// WebRTC streaming configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {
@@ -323,13 +344,28 @@ impl H264WebRTCEncoder {
     /// Encode a frame to H.264 access unit
     pub fn encode_frame(&mut self, frame: &CameraFrame) -> Result<EncodedFrame, String> {
         // Convert RGB to YUV420 if needed
-        let yuv_data = if frame.format == "RGB8" {
-            rgb8_to_yuv420(&frame.data, frame.width, frame.height)
-        } else if frame.format == "RGB24" {
-            rgb24_to_yuv420(&frame.data, frame.width, frame.height)
-        } else {
-            // Assume YUV420
-            frame.data.clone()
+        let format = detect_format(frame.data.len(), frame.width, frame.height);
+
+        let yuv_data = match format {
+            DetectedFormat::Rgb8 => rgb8_to_yuv420(&frame.data, frame.width, frame.height),
+            DetectedFormat::YuV420 => frame.data.clone(),
+            DetectedFormat::Rgb24 => rgb24_to_yuv420(&frame.data, frame.width, frame.height),
+            DetectedFormat::Rgba32 => {
+                // Convert RGBA32 to RGB24 first
+                let mut rgb_data = Vec::with_capacity((frame.width * frame.height * 3) as usize);
+                for i in 0..(frame.width * frame.height) as usize {
+                    rgb_data.push(frame.data[i * 4]);
+                    rgb_data.push(frame.data[i * 4 + 1]);
+                    rgb_data.push(frame.data[i * 4 + 2]);
+                }
+                rgb24_to_yuv420(&rgb_data, frame.width, frame.height)
+            }
+            DetectedFormat::Unknown(ratio) => {
+                return Err(format!(
+                    "Unsupported frame format with ratio {:.2} bytes/pixel",
+                    ratio
+                ));
+            }
         };
 
         let yuv_buffer = YUVBuffer::from_vec(yuv_data, self.width as usize, self.height as usize);
