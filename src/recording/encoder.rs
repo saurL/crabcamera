@@ -156,7 +156,7 @@ mod tests {
         let height = 480u32;
         let rgb = vec![128u8; (width * height * 3) as usize];
 
-        let yuv = rgb_to_yuv420(&rgb, width, height);
+        let yuv = rgb24_to_yuv420(&rgb, width, height);
 
         // YUV420: Y + U + V = w*h + w*h/4 + w*h/4 = w*h * 1.5
         let expected = (width * height * 3 / 2) as usize;

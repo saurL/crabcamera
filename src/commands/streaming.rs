@@ -2,7 +2,7 @@ use crate::platform::{optimizations, PlatformCamera};
 use crate::types::{CameraFormat, CameraFrame, CameraInitParams};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::{command, AppHandle, Emitter, Runtime};
+use tauri::command;
 use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 
 // Registry of active streaming sessions

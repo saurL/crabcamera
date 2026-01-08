@@ -151,7 +151,7 @@ fn rgb8_to_yuv420(rgb8: &[u8], width: u32, height: u32) -> Vec<u8> {
 
     yuv
 }
-
+#[derive(Debug)]
 enum DetectedFormat {
     Rgb8,   // 1 byte/pixel
     YuV420, // 1.5 bytes/pixel
@@ -284,8 +284,6 @@ pub struct WebRTCStreamer {
     max_failures: u32,
     mode: Arc<RwLock<StreamMode>>,
     camera_status: Arc<RwLock<CameraStatus>>,
-    /// Optional callback invoked on each raw camera frame before encoding
-    frame_callback: Arc<RwLock<Option<FrameProcessCallback>>>,
 }
 
 /// Camera availability status
@@ -345,7 +343,13 @@ impl H264WebRTCEncoder {
     pub fn encode_frame(&mut self, frame: &CameraFrame) -> Result<EncodedFrame, String> {
         // Convert RGB to YUV420 if needed
         let format = detect_format(frame.data.len(), frame.width, frame.height);
-
+        log::debug!(
+            "Encoding frame: detected format {:?} (data len: {}, width: {}, height: {})",
+            format,
+            frame.data.len(),
+            frame.width,
+            frame.height
+        );
         let yuv_data = match format {
             DetectedFormat::Rgb8 => rgb8_to_yuv420(&frame.data, frame.width, frame.height),
             DetectedFormat::YuV420 => frame.data.clone(),
@@ -700,7 +704,6 @@ impl WebRTCStreamer {
             max_failures: 10, // Back to reasonable limit
             mode: Arc::new(RwLock::new(StreamMode::RealCamera)),
             camera_status: Arc::new(RwLock::new(CameraStatus::Available)),
-            frame_callback: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -840,36 +843,6 @@ impl WebRTCStreamer {
         let mut config = self.config.write().unwrap();
         config.bitrate = bitrate;
         log::info!("Stream {} bitrate set to {} bps", self.stream_id, bitrate);
-    }
-
-    /// Sets a callback function to process raw camera frames before encoding.
-    ///
-    /// The callback receives a reference to each `CameraFrame` containing RGB data.
-    /// This is ideal for parallel processing like face detection without impacting
-    /// the WebRTC streaming pipeline.
-    ///
-    /// # Arguments
-    /// * `callback` - Function called on each frame with signature `Fn(&CameraFrame)`
-    ///
-    /// # Example
-    /// ```
-    /// streamer.set_frame_callback(|frame| {
-    ///     println!("Processing frame: {}x{}", frame.width, frame.height);
-    ///     // Perform face detection here
-    /// });
-    /// ```
-    pub fn set_frame_callback<F>(&self, callback: F)
-    where
-        F: Fn(&CameraFrame) + Send + Sync + 'static,
-    {
-        let mut cb = self.frame_callback.write().unwrap();
-        *cb = Some(Arc::new(callback));
-    }
-
-    /// Removes the currently set frame processing callback.
-    pub fn clear_frame_callback(&self) {
-        let mut cb = self.frame_callback.write().unwrap();
-        *cb = None;
     }
 
     /// Handle streaming failure
