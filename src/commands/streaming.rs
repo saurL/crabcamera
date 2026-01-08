@@ -70,8 +70,8 @@ pub async fn start_direct_streaming<R: Runtime>(
         CameraInitParams::new(config.device_id.clone()).with_format(format)
     };
 
-    let camera = PlatformCamera::new(params)
-        .map_err(|e| format!("Failed to initialize camera: {}", e))?;
+    let camera =
+        PlatformCamera::new(params).map_err(|e| format!("Failed to initialize camera: {}", e))?;
 
     let camera_arc = Arc::new(AsyncMutex::new(camera));
     let is_active = Arc::new(AsyncRwLock::new(true));
@@ -126,7 +126,10 @@ pub async fn stop_direct_streaming(device_id: String) -> Result<String, String> 
 
         Ok(format!("Direct streaming stopped for device {}", device_id))
     } else {
-        Err(format!("No active streaming session for device {}", device_id))
+        Err(format!(
+            "No active streaming session for device {}",
+            device_id
+        ))
     }
 }
 

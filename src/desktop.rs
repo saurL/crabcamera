@@ -800,4 +800,16 @@ impl<R: Runtime> CrabCameraManager<R> {
     ) -> Result<String, String> {
         webrtc::set_webrtc_stream_bitrate(stream_id, bitrate).await
     }
+
+    #[cfg(feature = "webrtc")]
+    pub async fn start_webrtc_streaming(
+        &self,
+        device_id: String,
+        stream_id: String,
+        _config: Option<crate::webrtc::StreamConfig>,
+        mode: Option<crate::webrtc::StreamMode>,
+        callback: Option<Box<dyn Fn(CameraFrame) + Send + Sync>>,
+    ) -> Result<String, String> {
+        webrtc::start_webrtc_streaming(device_id, stream_id, _config, mode, callback).await
+    }
 }
