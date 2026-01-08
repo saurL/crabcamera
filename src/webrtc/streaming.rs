@@ -230,6 +230,11 @@ impl H264WebRTCEncoder {
     pub fn encode_frame(&mut self, frame: &CameraFrame) -> Result<EncodedFrame, String> {
         // Convert RGB to YUV420 if needed
         let yuv_data = if frame.format == "RGB8" {
+            log::debug!("Frame size: {}x{}", frame.width, frame.height);
+            log::debug!("Frame data len: {}", frame.data.len());
+            log::debug!("Expected RGB24 len: {}", frame.width * frame.height * 3);
+            log::debug!("Frame format: {:?}", frame.format); // Si disponible
+
             rgb_to_yuv420(&frame.data, frame.width, frame.height)
         } else {
             // Assume YUV420
@@ -813,7 +818,11 @@ impl WebRTCStreamer {
     }
 
     /// Process camera frames for WebRTC streaming
-    async fn stream_processing_loop(&self, device_id: String, callback: Option<Box<dyn Fn(CameraFrame) + Send + Sync>>) {
+    async fn stream_processing_loop(
+        &self,
+        device_id: String,
+        callback: Option<Box<dyn Fn(CameraFrame) + Send + Sync>>,
+    ) {
         log::info!("Starting stream processing loop for device {}", device_id);
 
         let mode = self.get_mode().await;
