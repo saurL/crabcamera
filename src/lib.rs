@@ -79,11 +79,11 @@ use desktop::CrabCameraManager;
 
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the custom-tabs-manager APIs.
 pub trait CrabCameraExt<R: Runtime> {
-    fn crab_camera(&self) -> &CrabCameraManager<R>;
+    fn crabcamera(&self) -> &CrabCameraManager<R>;
 }
 
 impl<R: Runtime, T: Manager<R>> crate::CrabCameraExt<R> for T {
-    fn crab_camera(&self) -> &CrabCameraManager<R> {
+    fn crabcamera(&self) -> &CrabCameraManager<R> {
         self.state::<CrabCameraManager<R>>().inner()
     }
 }

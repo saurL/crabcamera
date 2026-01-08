@@ -1310,58 +1310,6 @@ Denies the list_webrtc_streams command without any pre-configured scope.
 <tr>
 <td>
 
-`crabcamera:allow-may-launch-url`
-
-</td>
-<td>
-
-Enables the may_launch_url command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`crabcamera:deny-may-launch-url`
-
-</td>
-<td>
-
-Denies the may_launch_url command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`crabcamera:allow-open-custom-tab-simple`
-
-</td>
-<td>
-
-Enables the open_custom_tab_simple command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`crabcamera:deny-open-custom-tab-simple`
-
-</td>
-<td>
-
-Denies the open_custom_tab_simple command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `crabcamera:allow-pause-webrtc-stream`
 
 </td>
@@ -1407,32 +1355,6 @@ Enables the poll_device_event command without any pre-configured scope.
 <td>
 
 Denies the poll_device_event command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`crabcamera:allow-post-message`
-
-</td>
-<td>
-
-Enables the post_message command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`crabcamera:deny-post-message`
-
-</td>
-<td>
-
-Denies the post_message command without any pre-configured scope.
 
 </td>
 </tr>
