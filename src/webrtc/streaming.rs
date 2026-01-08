@@ -4,6 +4,7 @@ use openh264::encoder::Encoder;
 use openh264::encoder::FrameType;
 use openh264::formats::YUVBuffer;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
 
@@ -20,7 +21,7 @@ use libopus_sys::{
 
 /// Convert RGB24 to YUV420 planar format
 #[cfg(feature = "recording")]
-fn rgb_to_yuv420(rgb: &[u8], width: u32, height: u32) -> Vec<u8> {
+fn rgb24_to_yuv420(rgb: &[u8], width: u32, height: u32) -> Vec<u8> {
     let w = width as usize;
     let h = height as usize;
 
@@ -52,6 +53,99 @@ fn rgb_to_yuv420(rgb: &[u8], width: u32, height: u32) -> Vec<u8> {
                 u_plane[uv_idx] = u_val.clamp(0, 255) as u8;
                 v_plane[uv_idx] = v_val.clamp(0, 255) as u8;
             }
+        }
+    }
+
+    yuv
+}
+
+static RGB8_LUT: OnceLock<([i32; 256], [i32; 256], [i32; 256])> = OnceLock::new();
+
+// Look-up tables for RGB8 to RGB24 conversion
+fn build_rgb8_lut() -> ([i32; 256], [i32; 256], [i32; 256]) {
+    let mut r_lut = [0i32; 256];
+    let mut g_lut = [0i32; 256];
+    let mut b_lut = [0i32; 256];
+
+    for i in 0..256 {
+        // Format RGB8 standard : 3 bits R, 3 bits G, 2 bits B
+        let r = ((i & 0xE0) >> 5) * 36; // 3 bits → 0-252
+        let g = ((i & 0x1C) >> 2) * 36; // 3 bits → 0-252
+        let b = (i & 0x03) * 85; // 2 bits → 0-255
+
+        r_lut[i] = r as i32;
+        g_lut[i] = g as i32;
+        b_lut[i] = b as i32;
+    }
+
+    (r_lut, g_lut, b_lut)
+}
+
+fn get_rgb8_lut() -> &'static ([i32; 256], [i32; 256], [i32; 256]) {
+    RGB8_LUT.get_or_init(build_rgb8_lut)
+}
+
+/// Conversion RGB8 → YUV420 avec lookup tables (optimisée)
+#[cfg(feature = "recording")]
+fn rgb8_to_yuv420(rgb8: &[u8], width: u32, height: u32) -> Vec<u8> {
+    let w = width as usize;
+    let h = height as usize;
+
+    assert_eq!(rgb8.len(), w * h, "RGB8 buffer size mismatch");
+    assert_eq!(w % 2, 0, "Width must be even for YUV420");
+    assert_eq!(h % 2, 0, "Height must be even for YUV420");
+
+    let (r_lut, g_lut, b_lut) = get_rgb8_lut();
+
+    let y_size = w * h;
+    let uv_size = (w / 2) * (h / 2);
+    let mut yuv = vec![0u8; y_size + uv_size * 2];
+
+    let (y_plane, uv_planes) = yuv.split_at_mut(y_size);
+    let (u_plane, v_plane) = uv_planes.split_at_mut(uv_size);
+
+    for y in 0..h {
+        for x in 0..w {
+            let idx = y * w + x;
+            let pixel = rgb8[idx] as usize;
+
+            let r = r_lut[pixel];
+            let g = g_lut[pixel];
+            let b = b_lut[pixel];
+
+            let y_val = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
+            y_plane[idx] = y_val.clamp(0, 255) as u8;
+        }
+    }
+
+    for y in (0..h).step_by(2) {
+        for x in (0..w).step_by(2) {
+            let idx00 = y * w + x;
+            let idx01 = y * w + x + 1;
+            let idx10 = (y + 1) * w + x;
+            let idx11 = (y + 1) * w + x + 1;
+
+            let mut r_sum = 0i32;
+            let mut g_sum = 0i32;
+            let mut b_sum = 0i32;
+
+            for &idx in &[idx00, idx01, idx10, idx11] {
+                let pixel = rgb8[idx] as usize;
+                r_sum += r_lut[pixel];
+                g_sum += g_lut[pixel];
+                b_sum += b_lut[pixel];
+            }
+
+            let r_avg = r_sum / 4;
+            let g_avg = g_sum / 4;
+            let b_avg = b_sum / 4;
+
+            let uv_idx = (y / 2) * (w / 2) + (x / 2);
+            let u_val = ((-38 * r_avg - 74 * g_avg + 112 * b_avg + 128) >> 8) + 128;
+            let v_val = ((112 * r_avg - 94 * g_avg - 18 * b_avg + 128) >> 8) + 128;
+
+            u_plane[uv_idx] = u_val.clamp(0, 255) as u8;
+            v_plane[uv_idx] = v_val.clamp(0, 255) as u8;
         }
     }
 
@@ -230,12 +324,9 @@ impl H264WebRTCEncoder {
     pub fn encode_frame(&mut self, frame: &CameraFrame) -> Result<EncodedFrame, String> {
         // Convert RGB to YUV420 if needed
         let yuv_data = if frame.format == "RGB8" {
-            log::debug!("Frame size: {}x{}", frame.width, frame.height);
-            log::debug!("Frame data len: {}", frame.data.len());
-            log::debug!("Expected RGB24 len: {}", frame.width * frame.height * 3);
-            log::debug!("Frame format: {:?}", frame.format); // Si disponible
-
-            rgb_to_yuv420(&frame.data, frame.width, frame.height)
+            rgb8_to_yuv420(&frame.data, frame.width, frame.height)
+        } else if frame.format == "RGB24" {
+            rgb24_to_yuv420(&frame.data, frame.width, frame.height)
         } else {
             // Assume YUV420
             frame.data.clone()

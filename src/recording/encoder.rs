@@ -106,7 +106,12 @@ pub struct EncodedFrame {
 fn rgb_to_yuv420(rgb: &[u8], width: u32, height: u32) -> Vec<u8> {
     let w = width as usize;
     let h = height as usize;
-
+    assert_eq!(rgb.len(), w * h * 3, "RGB data has incorrect length");
+    assert!(
+        w % 2 == 0 && h % 2 == 0,
+        "Width and height must be even for YUV420"
+    );
+    assert!(w >= 2 && h >= 2, "Width and height must be at least 2");
     // YUV420: Y plane (w*h) + U plane (w/2 * h/2) + V plane (w/2 * h/2)
     let y_size = w * h;
     let uv_size = (w / 2) * (h / 2);
