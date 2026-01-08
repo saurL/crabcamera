@@ -58,22 +58,38 @@ pub mod testing;
 
 // Re-exports for convenience
 pub use errors::CameraError;
+pub use errors::{Error, Result};
+#[cfg(feature = "headless")]
+pub use headless::{list_controls, list_devices, list_formats, HeadlessSession};
 pub use platform::{CameraSystem, PlatformCamera};
 pub use types::{
     CameraDeviceInfo, CameraFormat, CameraFrame, CameraInitParams, FrameMetadata, Platform,
 };
 
-#[cfg(feature = "headless")]
-pub use headless::{list_controls, list_devices, list_formats, HeadlessSession};
-
 use tauri::{
     plugin::{Builder, TauriPlugin},
-    Runtime,
+    Manager, Runtime,
 };
 
+#[cfg(desktop)]
+pub mod desktop;
+
+#[cfg(desktop)]
+use desktop::CrabCameraManager;
+
+/// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the custom-tabs-manager APIs.
+pub trait CrabCameraExt<R: Runtime> {
+    fn crab_camera(&self) -> &CrabCameraManager<R>;
+}
+
+impl<R: Runtime, T: Manager<R>> crate::CrabCameraExt<R> for T {
+    fn crab_camera(&self) -> &CrabCameraManager<R> {
+        self.state::<CrabCameraManager<R>>().inner()
+    }
+}
 /// Initialize the CrabCamera plugin with all commands
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
-    Builder::new("crabcamera")
+    Builder::<R>::new("crabcamera")
         .invoke_handler(tauri::generate_handler![
             // Initialization commands
             commands::init::initialize_camera_system,
@@ -100,6 +116,12 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::capture::get_capture_stats,
             commands::capture::save_frame_to_disk,
             commands::capture::save_frame_compressed,
+            // Direct streaming commands
+            commands::streaming::start_direct_streaming,
+            commands::streaming::stop_direct_streaming,
+            commands::streaming::get_streaming_status,
+            commands::streaming::list_active_streams,
+            commands::streaming::release_all_streams,
             // Advanced camera commands
             commands::advanced::set_camera_controls,
             commands::advanced::get_camera_controls,
@@ -187,6 +209,15 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::focus_stack::get_default_focus_config,
             commands::focus_stack::validate_focus_config,
         ])
+        .setup(|app, api| {
+            #[cfg(mobile)]
+            let crabcamera_manager = mobile::init(app, api)?;
+            #[cfg(desktop)]
+            let crabcamera_manager = desktop::init(app, api)?;
+            app.manage(crabcamera_manager);
+
+            Ok(())
+        })
         .build()
 }
 

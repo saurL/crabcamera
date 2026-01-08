@@ -7,7 +7,6 @@ use crate::webrtc::{
 use std::collections::HashMap;
 use tauri::command;
 use tokio::sync::RwLock;
-
 // Global WebRTC state management
 lazy_static::lazy_static! {
     static ref STREAMERS: RwLock<HashMap<String, WebRTCStreamer>> = RwLock::new(HashMap::new());
@@ -82,7 +81,7 @@ pub async fn start_webrtc_stream(
     streamer.init_h264_packetizer(1200).await;
 
     // Start the actual streaming
-    streamer.start_streaming(device_id).await?;
+    streamer.start_streaming(device_id, None).await?;
 
     // Store in global map
     let mut streamers = STREAMERS.write().await;

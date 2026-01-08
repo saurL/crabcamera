@@ -220,7 +220,9 @@ async fn test_frame_subscription_and_delivery() {
     let mut receiver2 = streamer.subscribe_frames();
 
     // Start streaming
-    let result = streamer.start_streaming("mock_device".to_string()).await;
+    let result = streamer
+        .start_streaming("mock_device".to_string(), None)
+        .await;
     assert!(result.is_ok(), "Should start streaming successfully");
 
     // Both subscribers should receive frames
@@ -297,7 +299,9 @@ async fn test_stream_quality_adaptation() {
     let streamer = WebRTCStreamer::new(stream_id, initial_config);
 
     // Start streaming
-    let result = streamer.start_streaming("test_device".to_string()).await;
+    let result = streamer
+        .start_streaming("test_device".to_string(), None)
+        .await;
     assert!(result.is_ok());
 
     // Simulate network congestion - reduce quality
@@ -358,7 +362,9 @@ async fn test_codec_switching() {
 
         let streamer = WebRTCStreamer::new(format!("{}_{:?}", stream_id, codec), config.clone());
 
-        let result = streamer.start_streaming("test_device".to_string()).await;
+        let result = streamer
+            .start_streaming("test_device".to_string(), None)
+            .await;
         assert!(result.is_ok(), "Should support codec {:?}", codec);
 
         let stats = streamer.get_stats().await;
@@ -450,7 +456,9 @@ async fn test_configuration_validation() {
         let streamer = WebRTCStreamer::new(test_stream_id, config.clone());
 
         // Should handle extreme configs gracefully
-        let result = streamer.start_streaming("test_device".to_string()).await;
+        let result = streamer
+            .start_streaming("test_device".to_string(), None)
+            .await;
         assert!(result.is_ok(), "Should handle extreme config {}", i);
 
         let stats = streamer.get_stats().await;

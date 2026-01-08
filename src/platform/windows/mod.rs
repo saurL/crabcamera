@@ -7,15 +7,23 @@ use self::controls::MediaFoundationControls;
 use crate::errors::CameraError;
 use crate::types::{CameraCapabilities, CameraControls, CameraFormat, CameraFrame};
 use nokhwa::Camera;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex, RwLock,
+};
 
 /// Combined Windows camera interface with both capture and control capabilities
 pub struct WindowsCamera {
     /// nokhwa camera for frame capture
-    pub nokhwa_camera: Camera,
+    pub nokhwa_camera: Arc<Mutex<Camera>>,
     /// MediaFoundation controls for advanced camera settings
     pub mf_controls: MediaFoundationControls,
     /// Device identifier
     pub device_id: String,
+    /// Streaming flag for callback thread
+    is_streaming: Arc<AtomicBool>,
+    /// Frame callback for continuous capture
+    frame_callback: Arc<RwLock<Option<Arc<dyn Fn(CameraFrame) + Send + Sync>>>>,
 }
 
 impl WindowsCamera {
@@ -36,15 +44,21 @@ impl WindowsCamera {
         let mf_controls = MediaFoundationControls::new(device_index)?;
 
         Ok(WindowsCamera {
-            nokhwa_camera,
+            nokhwa_camera: Arc::new(Mutex::new(nokhwa_camera)),
             mf_controls,
             device_id,
+            is_streaming: Arc::new(AtomicBool::new(false)),
+            frame_callback: Arc::new(RwLock::new(None)),
         })
     }
 
     /// Capture a frame using nokhwa
     pub fn capture_frame(&mut self) -> Result<CameraFrame, CameraError> {
-        capture::capture_frame(&mut self.nokhwa_camera, &self.device_id)
+        let mut camera = self
+            .nokhwa_camera
+            .lock()
+            .map_err(|_| CameraError::CaptureError("Failed to lock camera".to_string()))?;
+        capture::capture_frame(&mut *camera, &self.device_id)
     }
 
     /// Apply camera controls using MediaFoundation
@@ -65,25 +79,133 @@ impl WindowsCamera {
         self.mf_controls.get_capabilities()
     }
 
-    /// Start camera stream - must be called before capture_frame
+    /// Set frame callback for continuous capture
+    pub fn set_frame_callback<F>(&self, callback: F)
+    where
+        F: Fn(CameraFrame) + Send + Sync + 'static,
+    {
+        let mut cb = self.frame_callback.write().unwrap();
+        *cb = Some(Arc::new(callback));
+    }
+
+    /// Clear frame callback
+    pub fn clear_frame_callback(&self) {
+        let mut cb = self.frame_callback.write().unwrap();
+        *cb = None;
+    }
+
+    /// Start camera stream
     pub fn start_stream(&mut self) -> Result<(), CameraError> {
         log::debug!("Opening camera stream for device {}", self.device_id);
-        self.nokhwa_camera
+
+        let mut camera = self
+            .nokhwa_camera
+            .lock()
+            .map_err(|_| CameraError::StreamError("Failed to lock camera".to_string()))?;
+
+        camera
             .open_stream()
-            .map_err(|e| CameraError::StreamError(format!("Failed to open stream: {}", e)))
+            .map_err(|e| CameraError::StreamError(format!("Failed to open stream: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Start streaming camera frames
+    pub async fn start_streaming(&self, callback: Box<dyn Fn(CameraFrame) + Send + Sync>) -> Result<(), CameraError> {
+        log::debug!("Opening camera stream for device {}", self.device_id);
+
+        let mut camera = self
+            .nokhwa_camera
+            .lock()
+            .map_err(|_| CameraError::StreamError("Failed to lock camera".to_string()))?;
+
+        camera
+            .open_stream()
+            .map_err(|e| CameraError::StreamError(format!("Failed to open stream: {}", e)))?;
+
+        // Set streaming flag
+        self.is_streaming.store(true, Ordering::SeqCst);
+
+        // Spawn a thread to continuously capture frames and call the callback
+        let camera_clone = self.nokhwa_camera.clone();
+        let device_id = self.device_id.clone();
+        let is_streaming = self.is_streaming.clone();
+        let callback = Arc::new(callback);
+
+        std::thread::spawn(move || {
+            while is_streaming.load(Ordering::SeqCst) {
+                // Temporary lock to capture frame
+                let frame_result = {
+                    let mut cam = match camera_clone.lock() {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("Failed to lock camera: {}", e);
+                            break;
+                        }
+                    };
+
+                    cam.frame()
+                }; // Lock released here
+
+                match frame_result {
+                    Ok(frame) => {
+                        let camera_frame = CameraFrame::new(
+                            frame.buffer_bytes().to_vec(),
+                            frame.resolution().width_x,
+                            frame.resolution().height_y,
+                            device_id.clone(),
+                        )
+                        .with_format("RGB8".to_string());
+
+                        callback(camera_frame);
+                    }
+                    Err(e) => {
+                        eprintln!("Error capturing frame in callback: {}", e);
+                        // Don't break immediately, wait and retry
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
+
+                // Limit to ~60 FPS
+                std::thread::sleep(std::time::Duration::from_millis(16));
+            }
+
+            log::info!(
+                "Callback streaming thread stopped for device: {}",
+                device_id
+            );
+        });
+
+        Ok(())
     }
 
     /// Stop camera stream
     pub fn stop_stream(&mut self) -> Result<(), CameraError> {
         log::debug!("Stopping camera stream for device {}", self.device_id);
-        self.nokhwa_camera
+        if self.is_streaming.load(Ordering::SeqCst) == true {
+            // Stop callback thread
+            self.is_streaming.store(false, Ordering::SeqCst);
+
+            // Wait for thread to stop
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
+        let mut camera = self
+            .nokhwa_camera
+            .lock()
+            .map_err(|_| CameraError::StreamError("Failed to lock camera".to_string()))?;
+
+        camera
             .stop_stream()
             .map_err(|e| CameraError::StreamError(format!("Failed to stop stream: {}", e)))
     }
 
     /// Check if the stream is currently open
     pub fn is_stream_open(&self) -> bool {
-        self.nokhwa_camera.is_stream_open()
+        self.nokhwa_camera
+            .lock()
+            .map(|c| c.is_stream_open())
+            .unwrap_or(false)
     }
 
     /// Check if camera is available

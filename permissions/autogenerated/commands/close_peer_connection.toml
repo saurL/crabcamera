@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-close-peer-connection"
+description = "Enables the close_peer_connection command without any pre-configured scope."
+commands.allow = ["close_peer_connection"]
+
+[[permission]]
+identifier = "deny-close-peer-connection"
+description = "Denies the close_peer_connection command without any pre-configured scope."
+commands.deny = ["close_peer_connection"]

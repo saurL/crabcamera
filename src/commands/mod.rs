@@ -6,6 +6,7 @@ pub mod focus_stack;
 pub mod init;
 pub mod permissions;
 pub mod quality;
+pub mod streaming;
 #[cfg(feature = "webrtc")]
 pub mod webrtc;
 

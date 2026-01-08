@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 Camera status: {:?}", status);
 
     // Start the stream
-    match streamer.start_streaming(device_id.clone()).await {
+    match streamer.start_streaming(device_id.clone(), None).await {
         Ok(_) => println!("✅ WebRTC stream started successfully"),
         Err(e) => {
             println!("❌ Failed to start stream: {}", e);

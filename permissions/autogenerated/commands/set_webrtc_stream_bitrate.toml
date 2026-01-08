@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-set-webrtc-stream-bitrate"
+description = "Enables the set_webrtc_stream_bitrate command without any pre-configured scope."
+commands.allow = ["set_webrtc_stream_bitrate"]
+
+[[permission]]
+identifier = "deny-set-webrtc-stream-bitrate"
+description = "Denies the set_webrtc_stream_bitrate command without any pre-configured scope."
+commands.deny = ["set_webrtc_stream_bitrate"]

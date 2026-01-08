@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
 
+/// Callback function type for processing raw camera frames before encoding.
+/// Receives a reference to the captured frame for custom processing (e.g., face detection).
+pub type FrameProcessCallback = Arc<dyn Fn(&CameraFrame) + Send + Sync>;
+
 // Opus encoder imports
 #[cfg(feature = "audio")]
 use libopus_sys::{
@@ -165,6 +169,8 @@ pub struct WebRTCStreamer {
     max_failures: u32,
     mode: Arc<RwLock<StreamMode>>,
     camera_status: Arc<RwLock<CameraStatus>>,
+    /// Optional callback invoked on each raw camera frame before encoding
+    frame_callback: Arc<RwLock<Option<FrameProcessCallback>>>,
 }
 
 /// Camera availability status
@@ -562,11 +568,16 @@ impl WebRTCStreamer {
             max_failures: 10, // Back to reasonable limit
             mode: Arc::new(RwLock::new(StreamMode::RealCamera)),
             camera_status: Arc::new(RwLock::new(CameraStatus::Available)),
+            frame_callback: Arc::new(RwLock::new(None)),
         }
     }
 
     /// Start streaming camera frames
-    pub async fn start_streaming(&self, device_id: String) -> Result<(), String> {
+    pub async fn start_streaming(
+        &self,
+        device_id: String,
+        callback: Option<Box<dyn Fn(CameraFrame) + Send + Sync>>,
+    ) -> Result<(), String> {
         let mut is_streaming = self.is_streaming.write().unwrap();
         if *is_streaming {
             return Err("Stream already active".to_string());
@@ -589,7 +600,7 @@ impl WebRTCStreamer {
         let streamer = self.clone();
         tokio::spawn(async move {
             log::info!("Spawned streaming task for device {}", device_id);
-            streamer.stream_processing_loop(device_id).await;
+            streamer.stream_processing_loop(device_id, callback).await;
         });
 
         Ok(())
@@ -699,6 +710,36 @@ impl WebRTCStreamer {
         log::info!("Stream {} bitrate set to {} bps", self.stream_id, bitrate);
     }
 
+    /// Sets a callback function to process raw camera frames before encoding.
+    ///
+    /// The callback receives a reference to each `CameraFrame` containing RGB data.
+    /// This is ideal for parallel processing like face detection without impacting
+    /// the WebRTC streaming pipeline.
+    ///
+    /// # Arguments
+    /// * `callback` - Function called on each frame with signature `Fn(&CameraFrame)`
+    ///
+    /// # Example
+    /// ```
+    /// streamer.set_frame_callback(|frame| {
+    ///     println!("Processing frame: {}x{}", frame.width, frame.height);
+    ///     // Perform face detection here
+    /// });
+    /// ```
+    pub fn set_frame_callback<F>(&self, callback: F)
+    where
+        F: Fn(&CameraFrame) + Send + Sync + 'static,
+    {
+        let mut cb = self.frame_callback.write().unwrap();
+        *cb = Some(Arc::new(callback));
+    }
+
+    /// Removes the currently set frame processing callback.
+    pub fn clear_frame_callback(&self) {
+        let mut cb = self.frame_callback.write().unwrap();
+        *cb = None;
+    }
+
     /// Handle streaming failure
     async fn handle_failure(&self) {
         let mut count = self.failure_count.write().unwrap();
@@ -772,7 +813,7 @@ impl WebRTCStreamer {
     }
 
     /// Process camera frames for WebRTC streaming
-    async fn stream_processing_loop(&self, device_id: String) {
+    async fn stream_processing_loop(&self, device_id: String, callback: Option<Box<dyn Fn(CameraFrame) + Send + Sync>>) {
         log::info!("Starting stream processing loop for device {}", device_id);
 
         let mode = self.get_mode().await;
@@ -858,6 +899,11 @@ impl WebRTCStreamer {
                 Some(frame) => frame,
                 None => self.generate_synthetic_frame(frame_counter),
             };
+
+            // Invoke frame processing callback if set
+            if let Some(ref callback) = callback {
+                callback(camera_frame.clone());
+            }
 
             let frame_type = if frame_counter - last_keyframe >= keyframe_interval {
                 last_keyframe = frame_counter;

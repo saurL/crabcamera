@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-list-webrtc-streams"
+description = "Enables the list_webrtc_streams command without any pre-configured scope."
+commands.allow = ["list_webrtc_streams"]
+
+[[permission]]
+identifier = "deny-list-webrtc-streams"
+description = "Denies the list_webrtc_streams command without any pre-configured scope."
+commands.deny = ["list_webrtc_streams"]

@@ -7,6 +7,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/Michael-A-Kuykendall/crabcamera"
 keywords = ["tauri", "camera", "cross-platform", "desktop", "rust"]
 categories = ["multimedia", "gui"]
+links = "crabcamera"
 
 [workspace]
 
@@ -26,7 +27,7 @@ required-features = ["headless", "audio"]
 
 [dependencies]
 tauri = { version = "2.0", features = ["protocol-asset"] }
-tauri-plugin = "2.0"
+tauri-plugin = { version = "2", features = ["build"] }
 nokhwa = { version = "0.10.10", features = ["input-native", "output-threaded"] }
 tokio = { version = "1.40", features = ["full"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
@@ -142,3 +143,6 @@ required-features = ["recording"]
 name = "headless"
 path = "tests/headless/mod.rs"
 required-features = ["headless"]
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

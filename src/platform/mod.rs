@@ -278,6 +278,38 @@ impl PlatformCamera {
         }
     }
 
+    /// Start streaming with callback
+    pub async fn start_streaming(
+        &self,
+        callback: Box<dyn Fn(CameraFrame) + Send + Sync>,
+    ) -> Result<(), CameraError> {
+        match self {
+            #[cfg(target_os = "windows")]
+            PlatformCamera::Windows(camera) => camera.start_streaming(callback).await,
+
+            #[cfg(target_os = "macos")]
+            PlatformCamera::MacOS(camera) => {
+                camera.start_streaming(callback).await
+                    .map_err(|e| CameraError::StreamError(e))
+            }
+
+            #[cfg(target_os = "linux")]
+            PlatformCamera::Linux(camera) => {
+                camera.start_streaming(callback).await
+                    .map_err(|e| CameraError::StreamError(e))
+            }
+
+            PlatformCamera::Mock(_camera) => Err(CameraError::UnsupportedOperation(
+                "Mock camera doesn't support streaming with callback".to_string(),
+            )),
+
+            #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+            PlatformCamera::Unsupported => Err(CameraError::InitializationError(
+                "Unsupported platform".to_string(),
+            )),
+        }
+    }
+
     /// Check if camera is available
     pub fn is_available(&self) -> bool {
         match self {

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-stop-webrtc-stream"
+description = "Enables the stop_webrtc_stream command without any pre-configured scope."
+commands.allow = ["stop_webrtc_stream"]
+
+[[permission]]
+identifier = "deny-stop-webrtc-stream"
+description = "Denies the stop_webrtc_stream command without any pre-configured scope."
+commands.deny = ["stop_webrtc_stream"]

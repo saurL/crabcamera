@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-stop-direct-streaming"
+description = "Enables the stop_direct_streaming command without any pre-configured scope."
+commands.allow = ["stop_direct_streaming"]
+
+[[permission]]
+identifier = "deny-stop-direct-streaming"
+description = "Denies the stop_direct_streaming command without any pre-configured scope."
+commands.deny = ["stop_direct_streaming"]

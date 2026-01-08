@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-send-data-channel-message"
+description = "Enables the send_data_channel_message command without any pre-configured scope."
+commands.allow = ["send_data_channel_message"]
+
+[[permission]]
+identifier = "deny-send-data-channel-message"
+description = "Denies the send_data_channel_message command without any pre-configured scope."
+commands.deny = ["send_data_channel_message"]

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-resume-webrtc-stream"
+description = "Enables the resume_webrtc_stream command without any pre-configured scope."
+commands.allow = ["resume_webrtc_stream"]
+
+[[permission]]
+identifier = "deny-resume-webrtc-stream"
+description = "Denies the resume_webrtc_stream command without any pre-configured scope."
+commands.deny = ["resume_webrtc_stream"]
