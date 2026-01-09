@@ -68,7 +68,6 @@ pub fn initialize_camera(params: CameraInitParams) -> Result<MacOSCamera, Camera
         device_id: params.device_id,
         format: params.format,
         is_streaming: Arc::new(AtomicBool::new(false)),
-        frame_callback: Arc::new(RwLock::new(None)),
     })
 }
 
@@ -78,7 +77,6 @@ pub struct MacOSCamera {
     device_id: String,
     format: CameraFormat,
     is_streaming: Arc<AtomicBool>,
-    frame_callback: Arc<RwLock<Option<Arc<dyn Fn(CameraFrame) + Send + Sync>>>>,
 }
 
 impl MacOSCamera {
@@ -119,21 +117,6 @@ impl MacOSCamera {
             .lock()
             .map(|c| c.is_stream_open())
             .unwrap_or(false)
-    }
-
-    /// Set frame callback for continuous capture
-    pub fn set_frame_callback<F>(&self, callback: F)
-    where
-        F: Fn(CameraFrame) + Send + Sync + 'static,
-    {
-        let mut cb = self.frame_callback.write().unwrap();
-        *cb = Some(Arc::new(callback));
-    }
-
-    /// Clear frame callback
-    pub fn clear_frame_callback(&self) {
-        let mut cb = self.frame_callback.write().unwrap();
-        *cb = None;
     }
 
     /// Start camera stream

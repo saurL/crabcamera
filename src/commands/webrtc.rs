@@ -80,9 +80,6 @@ pub async fn start_webrtc_stream(
     // (This is required for associate_stream_with_peer to function.)
     streamer.init_h264_packetizer(1200).await;
 
-    // Start the actual streaming
-    streamer.start_streaming(device_id, None).await?;
-
     // Store in global map
     let mut streamers = STREAMERS.write().await;
     streamers.insert(stream_id.clone(), streamer);
@@ -90,49 +87,6 @@ pub async fn start_webrtc_stream(
     Ok(format!("WebRTC stream {} started", stream_id))
 }
 
-pub async fn start_webrtc_streaming(
-    device_id: String,
-    stream_id: String,
-    _config: Option<StreamConfig>,
-    mode: Option<crate::webrtc::StreamMode>,
-    callback: Option<Box<dyn Fn(crate::types::CameraFrame) + Send + Sync>>,
-) -> Result<String, String> {
-    log::info!(
-        "Starting WebRTC stream {} for device {}",
-        stream_id,
-        device_id
-    );
-
-    // Prevent duplicate stream IDs up-front to avoid spawning a stream task that can't be tracked.
-    {
-        let streamers = STREAMERS.read().await;
-        if streamers.contains_key(&stream_id) {
-            return Err(format!("WebRTC stream {} already exists", stream_id));
-        }
-    }
-
-    // Create streamer with default config if none provided
-    let config = _config.unwrap_or_default();
-    let streamer = WebRTCStreamer::new(stream_id.clone(), config);
-
-    // Set mode if provided
-    if let Some(stream_mode) = mode {
-        streamer.set_mode(stream_mode).await;
-    }
-
-    // Initialize the RTP packetizer for H.264 so RTP forwarding works by default.
-    // (This is required for associate_stream_with_peer to function.)
-    streamer.init_h264_packetizer(1200).await;
-
-    // Start the actual streaming
-    streamer.start_streaming(device_id, callback).await?;
-
-    // Store in global map
-    let mut streamers = STREAMERS.write().await;
-    streamers.insert(stream_id.clone(), streamer);
-
-    Ok(format!("WebRTC stream {} started", stream_id))
-}
 /// Stop WebRTC streaming
 #[command]
 pub async fn stop_webrtc_stream(stream_id: String) -> Result<String, String> {

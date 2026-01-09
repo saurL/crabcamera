@@ -60,7 +60,6 @@ pub fn initialize_camera(params: CameraInitParams) -> Result<LinuxCamera, Camera
         device_id: params.device_id,
         format: params.format,
         is_streaming: Arc::new(AtomicBool::new(false)),
-        frame_callback: Arc::new(RwLock::new(None)),
     })
 }
 
@@ -70,7 +69,6 @@ pub struct LinuxCamera {
     device_id: String,
     format: CameraFormat,
     is_streaming: Arc<AtomicBool>,
-    frame_callback: Arc<RwLock<Option<Arc<dyn Fn(CameraFrame) + Send + Sync>>>>,
 }
 
 impl LinuxCamera {
@@ -113,20 +111,6 @@ impl LinuxCamera {
             .unwrap_or(false)
     }
 
-    /// Set frame callback for continuous capture
-    pub fn set_frame_callback<F>(&self, callback: F)
-    where
-        F: Fn(CameraFrame) + Send + Sync + 'static,
-    {
-        let mut cb = self.frame_callback.write().unwrap();
-        *cb = Some(Arc::new(callback));
-    }
-
-    /// Clear frame callback
-    pub fn clear_frame_callback(&self) {
-        let mut cb = self.frame_callback.write().unwrap();
-        *cb = None;
-    }
     /// Start camera stream
     pub fn start_stream(&mut self) -> Result<(), CameraError> {
         let mut camera = self
@@ -137,8 +121,6 @@ impl LinuxCamera {
         camera.open_stream().map_err(|e| {
             CameraError::InitializationError(format!("Failed to start stream: {}", e))
         })?;
-
-        // Start callback thread if callback is set
 
         Ok(())
     }

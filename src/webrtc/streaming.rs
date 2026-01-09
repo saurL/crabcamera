@@ -4,13 +4,8 @@ use openh264::encoder::Encoder;
 use openh264::encoder::FrameType;
 use openh264::formats::YUVBuffer;
 use serde::{Deserialize, Serialize};
-use std::sync::OnceLock;
 use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
-
-/// Callback function type for processing raw camera frames before encoding.
-/// Receives a reference to the captured frame for custom processing (e.g., face detection).
-pub type FrameProcessCallback = Arc<dyn Fn(&CameraFrame) + Send + Sync>;
 
 // Opus encoder imports
 #[cfg(feature = "audio")]
@@ -21,7 +16,7 @@ use libopus_sys::{
 
 /// Convert RGB24 to YUV420 planar format
 #[cfg(feature = "recording")]
-fn rgb24_to_yuv420(rgb: &[u8], width: u32, height: u32) -> Vec<u8> {
+fn rgb_to_yuv420(rgb: &[u8], width: u32, height: u32) -> Vec<u8> {
     let w = width as usize;
     let h = height as usize;
 
@@ -57,120 +52,6 @@ fn rgb24_to_yuv420(rgb: &[u8], width: u32, height: u32) -> Vec<u8> {
     }
 
     yuv
-}
-
-static RGB8_LUT: OnceLock<([i32; 256], [i32; 256], [i32; 256])> = OnceLock::new();
-
-// Look-up tables for RGB8 to RGB24 conversion
-fn build_rgb8_lut() -> ([i32; 256], [i32; 256], [i32; 256]) {
-    let mut r_lut = [0i32; 256];
-    let mut g_lut = [0i32; 256];
-    let mut b_lut = [0i32; 256];
-
-    for i in 0..256 {
-        // Format RGB8 standard : 3 bits R, 3 bits G, 2 bits B
-        let r = ((i & 0xE0) >> 5) * 36; // 3 bits → 0-252
-        let g = ((i & 0x1C) >> 2) * 36; // 3 bits → 0-252
-        let b = (i & 0x03) * 85; // 2 bits → 0-255
-
-        r_lut[i] = r as i32;
-        g_lut[i] = g as i32;
-        b_lut[i] = b as i32;
-    }
-
-    (r_lut, g_lut, b_lut)
-}
-
-fn get_rgb8_lut() -> &'static ([i32; 256], [i32; 256], [i32; 256]) {
-    RGB8_LUT.get_or_init(build_rgb8_lut)
-}
-
-/// Conversion RGB8 → YUV420 avec lookup tables (optimisée)
-#[cfg(feature = "recording")]
-fn rgb8_to_yuv420(rgb8: &[u8], width: u32, height: u32) -> Vec<u8> {
-    let w = width as usize;
-    let h = height as usize;
-
-    assert_eq!(rgb8.len(), w * h, "RGB8 buffer size mismatch");
-    assert_eq!(w % 2, 0, "Width must be even for YUV420");
-    assert_eq!(h % 2, 0, "Height must be even for YUV420");
-
-    let (r_lut, g_lut, b_lut) = get_rgb8_lut();
-
-    let y_size = w * h;
-    let uv_size = (w / 2) * (h / 2);
-    let mut yuv = vec![0u8; y_size + uv_size * 2];
-
-    let (y_plane, uv_planes) = yuv.split_at_mut(y_size);
-    let (u_plane, v_plane) = uv_planes.split_at_mut(uv_size);
-
-    for y in 0..h {
-        for x in 0..w {
-            let idx = y * w + x;
-            let pixel = rgb8[idx] as usize;
-
-            let r = r_lut[pixel];
-            let g = g_lut[pixel];
-            let b = b_lut[pixel];
-
-            let y_val = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
-            y_plane[idx] = y_val.clamp(0, 255) as u8;
-        }
-    }
-
-    for y in (0..h).step_by(2) {
-        for x in (0..w).step_by(2) {
-            let idx00 = y * w + x;
-            let idx01 = y * w + x + 1;
-            let idx10 = (y + 1) * w + x;
-            let idx11 = (y + 1) * w + x + 1;
-
-            let mut r_sum = 0i32;
-            let mut g_sum = 0i32;
-            let mut b_sum = 0i32;
-
-            for &idx in &[idx00, idx01, idx10, idx11] {
-                let pixel = rgb8[idx] as usize;
-                r_sum += r_lut[pixel];
-                g_sum += g_lut[pixel];
-                b_sum += b_lut[pixel];
-            }
-
-            let r_avg = r_sum / 4;
-            let g_avg = g_sum / 4;
-            let b_avg = b_sum / 4;
-
-            let uv_idx = (y / 2) * (w / 2) + (x / 2);
-            let u_val = ((-38 * r_avg - 74 * g_avg + 112 * b_avg + 128) >> 8) + 128;
-            let v_val = ((112 * r_avg - 94 * g_avg - 18 * b_avg + 128) >> 8) + 128;
-
-            u_plane[uv_idx] = u_val.clamp(0, 255) as u8;
-            v_plane[uv_idx] = v_val.clamp(0, 255) as u8;
-        }
-    }
-
-    yuv
-}
-#[derive(Debug)]
-enum DetectedFormat {
-    Rgb8,   // 1 byte/pixel
-    YuV420, // 1.5 bytes/pixel
-    Rgb24,  // 3 bytes/pixel
-    Rgba32, // 4 bytes/pixel
-    Unknown(f32),
-}
-
-fn detect_format(data_len: usize, width: u32, height: u32) -> DetectedFormat {
-    let pixels = (width * height) as usize;
-    let ratio = data_len as f32 / pixels as f32;
-
-    match ratio {
-        r if (r - 1.0).abs() < 0.01 => DetectedFormat::Rgb8,
-        r if (r - 1.5).abs() < 0.01 => DetectedFormat::YuV420,
-        r if (r - 3.0).abs() < 0.01 => DetectedFormat::Rgb24,
-        r if (r - 4.0).abs() < 0.01 => DetectedFormat::Rgba32,
-        r => DetectedFormat::Unknown(r),
-    }
 }
 
 /// WebRTC streaming configuration
@@ -342,34 +223,11 @@ impl H264WebRTCEncoder {
     /// Encode a frame to H.264 access unit
     pub fn encode_frame(&mut self, frame: &CameraFrame) -> Result<EncodedFrame, String> {
         // Convert RGB to YUV420 if needed
-        let format = detect_format(frame.data.len(), frame.width, frame.height);
-        log::debug!(
-            "Encoding frame: detected format {:?} (data len: {}, width: {}, height: {})",
-            format,
-            frame.data.len(),
-            frame.width,
-            frame.height
-        );
-        let yuv_data = match format {
-            DetectedFormat::Rgb8 => rgb8_to_yuv420(&frame.data, frame.width, frame.height),
-            DetectedFormat::YuV420 => frame.data.clone(),
-            DetectedFormat::Rgb24 => rgb24_to_yuv420(&frame.data, frame.width, frame.height),
-            DetectedFormat::Rgba32 => {
-                // Convert RGBA32 to RGB24 first
-                let mut rgb_data = Vec::with_capacity((frame.width * frame.height * 3) as usize);
-                for i in 0..(frame.width * frame.height) as usize {
-                    rgb_data.push(frame.data[i * 4]);
-                    rgb_data.push(frame.data[i * 4 + 1]);
-                    rgb_data.push(frame.data[i * 4 + 2]);
-                }
-                rgb24_to_yuv420(&rgb_data, frame.width, frame.height)
-            }
-            DetectedFormat::Unknown(ratio) => {
-                return Err(format!(
-                    "Unsupported frame format with ratio {:.2} bytes/pixel",
-                    ratio
-                ));
-            }
+        let yuv_data = if frame.format == "RGB8" {
+            rgb_to_yuv420(&frame.data, frame.width, frame.height)
+        } else {
+            // Assume YUV420
+            frame.data.clone()
         };
 
         let yuv_buffer = YUVBuffer::from_vec(yuv_data, self.width as usize, self.height as usize);
@@ -708,11 +566,7 @@ impl WebRTCStreamer {
     }
 
     /// Start streaming camera frames
-    pub async fn start_streaming(
-        &self,
-        device_id: String,
-        callback: Option<Box<dyn Fn(CameraFrame) + Send + Sync>>,
-    ) -> Result<(), String> {
+    pub async fn start_streaming(&self, device_id: String) -> Result<(), String> {
         let mut is_streaming = self.is_streaming.write().unwrap();
         if *is_streaming {
             return Err("Stream already active".to_string());
@@ -735,7 +589,7 @@ impl WebRTCStreamer {
         let streamer = self.clone();
         tokio::spawn(async move {
             log::info!("Spawned streaming task for device {}", device_id);
-            streamer.stream_processing_loop(device_id, callback).await;
+            streamer.stream_processing_loop(device_id).await;
         });
 
         Ok(())
@@ -918,11 +772,7 @@ impl WebRTCStreamer {
     }
 
     /// Process camera frames for WebRTC streaming
-    async fn stream_processing_loop(
-        &self,
-        device_id: String,
-        callback: Option<Box<dyn Fn(CameraFrame) + Send + Sync>>,
-    ) {
+    async fn stream_processing_loop(&self, device_id: String) {
         log::info!("Starting stream processing loop for device {}", device_id);
 
         let mode = self.get_mode().await;
@@ -1008,11 +858,6 @@ impl WebRTCStreamer {
                 Some(frame) => frame,
                 None => self.generate_synthetic_frame(frame_counter),
             };
-
-            // Invoke frame processing callback if set
-            if let Some(ref callback) = callback {
-                callback(camera_frame.clone());
-            }
 
             let frame_type = if frame_counter - last_keyframe >= keyframe_interval {
                 last_keyframe = frame_counter;

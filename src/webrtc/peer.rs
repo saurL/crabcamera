@@ -320,15 +320,10 @@ impl PeerConnection {
             .await
             .map_err(|e| format!("Failed to set local description: {}", e))?;
 
-        // Retrieve local description after setting it
-        // This now includes ICE credentials (ice-ufrag, ice-pwd)
-        let local_desc = self
-            .peer_connection
-            .local_description()
-            .await
-            .ok_or("No local description available after setting")?;
-
-        log::debug!("SDP offer created with ICE credentials for peer {}", self.id);
+        log::debug!(
+            "SDP offer created with ICE credentials for peer {}",
+            self.id
+        );
         Ok(local_desc.into())
     }
 
@@ -348,16 +343,7 @@ impl PeerConnection {
             .await
             .map_err(|e| format!("Failed to set local description: {}", e))?;
 
-        // Retrieve local description after setting it
-        // This now includes ICE credentials (ice-ufrag, ice-pwd)
-        let local_desc = self
-            .peer_connection
-            .local_description()
-            .await
-            .ok_or("No local description available after setting")?;
-
-        log::debug!("SDP answer created with ICE credentials for peer {}", self.id);
-        Ok(local_desc.into())
+        Ok(answer.into())
     }
 
     /// Set remote description

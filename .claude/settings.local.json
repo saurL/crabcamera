@@ -5,7 +5,10 @@
       "Bash(cargo tarpaulin:*)",
       "Bash(cargo test:*)",
       "Bash(find:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(ls:*)",
+      "Bash(test:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

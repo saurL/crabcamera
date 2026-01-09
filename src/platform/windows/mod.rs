@@ -22,8 +22,6 @@ pub struct WindowsCamera {
     pub device_id: String,
     /// Streaming flag for callback thread
     is_streaming: Arc<AtomicBool>,
-    /// Frame callback for continuous capture
-    frame_callback: Arc<RwLock<Option<Arc<dyn Fn(CameraFrame) + Send + Sync>>>>,
 }
 
 impl WindowsCamera {
@@ -48,7 +46,6 @@ impl WindowsCamera {
             mf_controls,
             device_id,
             is_streaming: Arc::new(AtomicBool::new(false)),
-            frame_callback: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -79,21 +76,6 @@ impl WindowsCamera {
         self.mf_controls.get_capabilities()
     }
 
-    /// Set frame callback for continuous capture
-    pub fn set_frame_callback<F>(&self, callback: F)
-    where
-        F: Fn(CameraFrame) + Send + Sync + 'static,
-    {
-        let mut cb = self.frame_callback.write().unwrap();
-        *cb = Some(Arc::new(callback));
-    }
-
-    /// Clear frame callback
-    pub fn clear_frame_callback(&self) {
-        let mut cb = self.frame_callback.write().unwrap();
-        *cb = None;
-    }
-
     /// Start camera stream
     pub fn start_stream(&mut self) -> Result<(), CameraError> {
         log::debug!("Opening camera stream for device {}", self.device_id);
@@ -111,7 +93,10 @@ impl WindowsCamera {
     }
 
     /// Start streaming camera frames
-    pub async fn start_streaming(&self, callback: Box<dyn Fn(CameraFrame) + Send + Sync>) -> Result<(), CameraError> {
+    pub async fn start_streaming(
+        &self,
+        callback: Box<dyn Fn(CameraFrame) + Send + Sync>,
+    ) -> Result<(), CameraError> {
         log::debug!("Opening camera stream for device {}", self.device_id);
 
         let mut camera = self
